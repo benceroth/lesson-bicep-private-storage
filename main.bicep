@@ -2,6 +2,7 @@
 param location string = 'westeurope'
 
 var vnetName = 'vnet-harbor-prod'
+var storageAccountName = 'stharbor${uniqueString(resourceGroup().id)}'
 
 resource appNsg 'Microsoft.Network/networkSecurityGroups@2025-01-01' = {
   name: 'nsg-harbor-app-prod'
@@ -77,5 +78,42 @@ resource privateEndpointSubnet 'Microsoft.Network/virtualNetworks/subnets@2025-0
   properties: {
     addressPrefix: '10.40.3.0/24'
     privateEndpointNetworkPolicies: 'Disabled'
+  }
+}
+
+resource storage 'Microsoft.Storage/storageAccounts@2025-06-01' = {
+  name: storageAccountName
+  location: location
+  sku: {
+    name: 'Standard_LRS'
+  }
+  kind: 'StorageV2'
+  properties: {
+    supportsHttpsTrafficOnly: true
+    minimumTlsVersion: 'TLS1_2'
+    allowBlobPublicAccess: false
+    // A private endpoint alone does not disable the public endpoint.
+    publicNetworkAccess: 'Disabled'
+  }
+}
+
+resource blobPrivateEndpoint 'Microsoft.Network/privateEndpoints@2024-07-01' = {
+  name: 'pe-harbor-blob-prod'
+  location: location
+  properties: {
+    subnet: {
+      id: privateEndpointSubnet.id
+    }
+    privateLinkServiceConnections: [
+      {
+        name: 'blob-connection'
+        properties: {
+          privateLinkServiceId: storage.id
+          groupIds: [
+            'blob'
+          ]
+        }
+      }
+    ]
   }
 }
