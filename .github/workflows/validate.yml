@@ -1,0 +1,54 @@
+name: validate
+
+# Offline only: no Azure login, no cost. Runs the same commands the README tells you to run.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  BICEP_VERSION: v0.45.15
+  PSRULE_VERSION: 2.9.0
+  PSRULE_AZURE_VERSION: 1.47.0
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pinned Bicep
+        run: az bicep install --version "$BICEP_VERSION"
+
+      - name: Build and lint every template
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in main.bicep variants/*.bicep test-vm/vm.bicep; do
+            echo "::group::$f"
+            az bicep build --file "$f" --stdout > /dev/null
+            az bicep lint --file "$f"
+            echo "::endgroup::"
+          done
+          az bicep build-params --file main.bicepparam --stdout > /dev/null
+
+      - name: Offline control matrix (compiled ARM JSON)
+        shell: pwsh
+        run: ./verify/static-check.ps1
+
+      - name: PSRule for Azure (main.bicep only)
+        shell: pwsh
+        run: |
+          Install-PSResource PSRule -Version $env:PSRULE_VERSION -TrustRepository -Scope CurrentUser
+          Install-PSResource PSRule.Rules.Azure -Version $env:PSRULE_AZURE_VERSION -TrustRepository -Scope CurrentUser
+          $env:PSRULE_AZURE_BICEP_PATH = (Get-Item "$HOME/.azure/bin/bicep*" | Select-Object -First 1).FullName
+          Assert-PSRule -InputPath ./main.bicep -Option ./policy/psrule-options.yaml -Module PSRule.Rules.Azure -Format File
+
+      - name: Checkov (advisory, never fails the build)
+        shell: bash
+        run: |
+          pip install "checkov==3.2.*"
+          checkov --config-file policy/checkov.yaml

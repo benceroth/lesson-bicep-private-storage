@@ -1,0 +1,131 @@
+// BROKEN VARIANT - do not use in production.
+// Differs from ../main.bicep in ONE control: the private DNS zone, its VNet link and the
+// endpoint's DNS zone group are all missing. The private endpoint and its private IP exist,
+// and public network access is disabled.
+// Expected: inside the VNet the blob hostname still resolves to a public address, the
+// request is then refused by the storage firewall, and the error looks like a firewall
+// problem rather than a DNS problem. See docs/dns-troubleshooting.md.
+
+@description('Azure region for the Harbor Ledger production network.')
+param location string = 'westeurope'
+
+var vnetName = 'vnet-harbor-prod'
+var storageAccountName = 'stharbor${uniqueString(resourceGroup().id)}'
+
+resource appNsg 'Microsoft.Network/networkSecurityGroups@2025-01-01' = {
+  name: 'nsg-harbor-app-prod'
+  location: location
+  properties: {
+    securityRules: [
+      {
+        name: 'Allow-Integration-Https-In'
+        properties: {
+          // The integration tier is the only approved inbound app caller.
+          priority: 100
+          access: 'Allow'
+          direction: 'Inbound'
+          protocol: 'Tcp'
+          sourcePortRange: '*'
+          destinationPortRange: '443'
+          sourceAddressPrefix: '10.40.1.0/24'
+          destinationAddressPrefix: '10.40.2.0/24'
+        }
+      }
+      {
+        name: 'Deny-Other-Vnet-In'
+        properties: {
+          // Override Azure's broad AllowVNetInBound default for the app subnet.
+          priority: 4000
+          access: 'Deny'
+          direction: 'Inbound'
+          protocol: '*'
+          sourcePortRange: '*'
+          destinationPortRange: '*'
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: '10.40.2.0/24'
+        }
+      }
+    ]
+  }
+}
+
+resource vnet 'Microsoft.Network/virtualNetworks@2025-01-01' = {
+  name: vnetName
+  location: location
+  properties: {
+    addressSpace: {
+      addressPrefixes: [
+        '10.40.0.0/16'
+      ]
+    }
+  }
+}
+
+resource integrationSubnet 'Microsoft.Network/virtualNetworks/subnets@2025-01-01' = {
+  parent: vnet
+  name: 'snet-integration'
+  properties: {
+    addressPrefix: '10.40.1.0/24'
+  }
+}
+
+resource appSubnet 'Microsoft.Network/virtualNetworks/subnets@2025-01-01' = {
+  parent: vnet
+  name: 'snet-app'
+  properties: {
+    addressPrefix: '10.40.2.0/24'
+    networkSecurityGroup: {
+      id: appNsg.id
+    }
+  }
+}
+
+resource privateEndpointSubnet 'Microsoft.Network/virtualNetworks/subnets@2025-01-01' = {
+  parent: vnet
+  name: 'snet-private-endpoints'
+  properties: {
+    addressPrefix: '10.40.3.0/24'
+    privateEndpointNetworkPolicies: 'Disabled'
+  }
+}
+
+resource storage 'Microsoft.Storage/storageAccounts@2025-06-01' = {
+  name: storageAccountName
+  location: location
+  sku: {
+    name: 'Standard_LRS'
+  }
+  kind: 'StorageV2'
+  properties: {
+    supportsHttpsTrafficOnly: true
+    minimumTlsVersion: 'TLS1_2'
+    allowBlobPublicAccess: false
+    // A private endpoint alone does not disable the public endpoint.
+    publicNetworkAccess: 'Disabled'
+  }
+}
+
+// MISSING CONTROL: privatelink.blob zone, virtualNetworkLinks and privateDnsZoneGroups.
+
+resource blobPrivateEndpoint 'Microsoft.Network/privateEndpoints@2024-07-01' = {
+  name: 'pe-harbor-blob-prod'
+  location: location
+  properties: {
+    subnet: {
+      id: privateEndpointSubnet.id
+    }
+    privateLinkServiceConnections: [
+      {
+        name: 'blob-connection'
+        properties: {
+          privateLinkServiceId: storage.id
+          groupIds: [
+            'blob'
+          ]
+        }
+      }
+    ]
+  }
+}
+
+output storageBlobHostName string = '${storage.name}.blob.${environment().suffixes.storage}'

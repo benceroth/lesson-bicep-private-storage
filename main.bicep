@@ -3,6 +3,7 @@ param location string = 'westeurope'
 
 var vnetName = 'vnet-harbor-prod'
 var storageAccountName = 'stharbor${uniqueString(resourceGroup().id)}'
+var blobPrivateDnsZoneName = 'privatelink.blob.${environment().suffixes.storage}'
 
 resource appNsg 'Microsoft.Network/networkSecurityGroups@2025-01-01' = {
   name: 'nsg-harbor-app-prod'
@@ -97,6 +98,23 @@ resource storage 'Microsoft.Storage/storageAccounts@2025-06-01' = {
   }
 }
 
+resource blobPrivateDnsZone 'Microsoft.Network/privateDnsZones@2024-06-01' = {
+  name: blobPrivateDnsZoneName
+  location: 'global'
+}
+
+resource vnetLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2024-06-01' = {
+  parent: blobPrivateDnsZone
+  name: 'link-harbor-prod'
+  location: 'global'
+  properties: {
+    registrationEnabled: false
+    virtualNetwork: {
+      id: vnet.id
+    }
+  }
+}
+
 resource blobPrivateEndpoint 'Microsoft.Network/privateEndpoints@2024-07-01' = {
   name: 'pe-harbor-blob-prod'
   location: location
@@ -117,3 +135,21 @@ resource blobPrivateEndpoint 'Microsoft.Network/privateEndpoints@2024-07-01' = {
     ]
   }
 }
+
+resource blobDnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2024-07-01' = {
+  parent: blobPrivateEndpoint
+  name: 'default'
+  properties: {
+    privateDnsZoneConfigs: [
+      {
+        name: 'blob-zone'
+        properties: {
+          privateDnsZoneId: blobPrivateDnsZone.id
+        }
+      }
+    ]
+  }
+}
+
+output storageBlobHostName string = '${storage.name}.blob.${environment().suffixes.storage}'
+output privateDnsZone string = blobPrivateDnsZone.name

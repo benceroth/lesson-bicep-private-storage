@@ -1,0 +1,43 @@
+name: what-if
+
+# Opt-in. Needs an Azure subscription and a federated (OIDC) credential; never runs on PRs.
+# Configure repository secrets AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID.
+# what-if reads and previews only: it does not deploy.
+on:
+  workflow_dispatch:
+    inputs:
+      resource-group:
+        description: Existing resource group to preview against
+        required: true
+      template:
+        description: Template to preview
+        default: main.bicep
+        type: choice
+        options:
+          - main.bicep
+          - variants/no-public-access-disable.bicep
+          - variants/no-dns-zone.bicep
+          - variants/empty-nsg.bicep
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  what-if:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Preview
+        env:
+          RG: ${{ inputs.resource-group }}
+          TEMPLATE: ${{ inputs.template }}
+        run: |
+          az deployment group what-if \
+            --resource-group "$RG" \
+            --template-file "$TEMPLATE"

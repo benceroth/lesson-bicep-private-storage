@@ -1,0 +1,17 @@
+# Optional second scanner (Checkov). Run from the repo root:
+#   pip install "checkov==3.2.*"
+#   checkov --config-file policy/checkov.yaml
+# Scans only main.bicep; the variants are deliberately broken.
+#
+# Result on the unmodified post template (Checkov 3.2.533, run offline): 9 passed, 3 failed.
+#   CKV_AZURE_35  default network rule is not 'Deny' (the template uses publicNetworkAccess=Disabled instead)
+#   CKV_AZURE_43  naming rule check; the name is a uniqueString() expression the scanner cannot evaluate
+#   CKV_AZURE_206 Standard_LRS replication (cost choice for the sample)
+# soft-fail keeps this advisory: it reports but never fails CI. See docs/limits.md.
+framework:
+  - bicep
+file:
+  - main.bicep
+compact: true
+quiet: true
+soft-fail: true

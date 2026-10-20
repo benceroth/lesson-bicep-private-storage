@@ -1,0 +1,39 @@
+# PSRule for Azure options for the working template only.
+# The variants/ templates are deliberately broken and the test VM is throwaway; both are excluded.
+# Run: Invoke-PSRule -InputPath ./main.bicep -Option ./policy/psrule-options.yaml -Module PSRule.Rules.Azure
+# (Tested with PSRule 2.9.0 and PSRule.Rules.Azure 1.47.0.)
+
+include:
+  module:
+    - PSRule.Rules.Azure
+
+configuration:
+  # Expand .bicep files with the Bicep CLI before analysis.
+  AZURE_BICEP_FILE_EXPANSION: true
+  AZURE_BICEP_CHECK_TOOL: true
+
+input:
+  pathIgnore:
+    - 'variants/'
+    - 'test-vm/'
+    - '.build/'
+    - '.github/'
+
+output:
+  culture:
+    - en
+
+# Findings of the unmodified post template that this repo does NOT fix, on purpose, because
+# main.bicep must stay identical to the article. Each one is listed in docs/limits.md.
+# Remove an entry here to see the finding; do not add entries without documenting them.
+rule:
+  exclude:
+    - Azure.Resource.UseTags                # no tagging standard is part of the lesson
+    - Azure.Storage.UseReplication          # Standard_LRS is a cost choice for the sample
+    - Azure.Storage.SoftDelete              # data-protection settings are out of scope
+    - Azure.Storage.ContainerSoftDelete
+    - Azure.Storage.Firewall                # checks networkAcls.defaultAction; the template uses publicNetworkAccess=Disabled instead
+    - Azure.Storage.LocalAuth               # allowSharedKeyAccess is not set; see docs/limits.md
+    - Azure.VNET.UseNSGs                    # NSG only on snet-app, per the single documented flow
+    - Azure.VNET.PrivateSubnet              # default outbound deliberately retained (post: egress not defined)
+    - Azure.NSG.LateralTraversal            # Deny-Other-Vnet-In is scoped to the app subnet, not all inbound

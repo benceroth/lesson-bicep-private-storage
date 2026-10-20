@@ -1,0 +1,11 @@
+Checklist for main.bicep
+PASS  PublicAccessDisabled   storage publicNetworkAccess = Disabled
+PASS  BlobPublicAccessOff    storage allowBlobPublicAccess = false
+PASS  PrivateEndpointBlob    private endpoint targets the blob subresource
+PASS  DnsZone                private DNS zone privatelink.blob.* declared
+PASS  DnsVnetLink            private DNS zone linked to the VNet
+PASS  DnsZoneGroup           private endpoint has a DNS zone group
+PASS  NsgAllowIntegration443 NSG allow 100: 10.40.1.0/24 -> 10.40.2.0/24 TCP 443
+PASS  NsgDenyOtherVnet       NSG deny 4000: VirtualNetwork -> 10.40.2.0/24
+PASS  NsgAttachedToApp       NSG attached to snet-app
+RESULT: all controls present

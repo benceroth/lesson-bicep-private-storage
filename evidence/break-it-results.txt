@@ -1,0 +1,12 @@
+CLEAN   main.bicep
+CAUGHT  break-it/01-private-endpoint-public-access-on.bicep
+        findings: PublicAccessDisabled
+CAUGHT  break-it/02-missing-dns-zone-link.bicep
+        findings: DnsVnetLink
+CAUGHT  break-it/03-nsg-only.bicep
+        findings: PublicAccessDisabled, PrivateEndpointBlob, DnsZone, DnsVnetLink, DnsZoneGroup
+CAUGHT  break-it/04-wildcard-nsg-source.bicep
+        findings: NsgAllowIntegration443
+CAUGHT  break-it/05-empty-nsg.bicep
+        findings: NsgAllowIntegration443, NsgDenyOtherVnet
+RESULT: every broken case is caught; main.bicep is clean
